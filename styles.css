@@ -197,6 +197,11 @@ section {
   color: var(--gold);
   font-size: 1.05em;
   line-height: 0.95;
+  /* background-clip:text paints only inside the box, and this line-height is
+     shorter than the italic's descenders, so g/j got shaved off. Grow the paint
+     box and pull the same amount back off the layout. */
+  padding-bottom: 0.22em;
+  margin-bottom: -0.22em;
 }
 .headline em.block,
 .headline .accent.block { display: block; }
@@ -220,6 +225,8 @@ h2.headline-md .accent {
   -webkit-text-fill-color: transparent;
   background-clip: text;
   color: var(--gold);
+  padding-bottom: 0.22em;
+  margin-bottom: -0.22em;
 }
 h2.headline-md em.block { display: block; }
 
