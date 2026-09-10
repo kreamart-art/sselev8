@@ -272,10 +272,7 @@ function initFormHandler() {
       (lang === 'nl' ? 'Reden: ' : 'Reason: ') + data.reason + '\n\n' +
       data.message
     );
-    var to = 'info@sselev8.com';
-    if (/a&r|aanvraag|submission/i.test(data.reason)) to = 'ar@sselev8.com';
-    else if (/book/i.test(data.reason)) to = 'bookings@sselev8.com';
-    else if (/press|pers/i.test(data.reason)) to = 'press@sselev8.com';
+    var to = 'info@elev8entertainment.nl';
     window.location.href = 'mailto:' + to + '?subject=' + subject + '&body=' + body;
   });
 }

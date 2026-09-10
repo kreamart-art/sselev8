@@ -2,7 +2,7 @@
 
 Boutique music management website — five-page bilingual (EN/NL) static site.
 
-Live: https://kreamart-art.github.io/sselev8/
+Live: https://elev8entertainment.nl/
 
 ## Stack
 
