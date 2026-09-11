@@ -26,6 +26,7 @@
 
   --f-display:    "Big Shoulders Display", "Impact", "Arial Narrow", sans-serif;
   --f-serif:      "Cormorant Garamond", "Georgia", serif;
+  --f-script:     "Pinyon Script", "Cormorant Garamond", cursive;
   --f-body:       "Manrope", "Inter", system-ui, -apple-system, sans-serif;
   --f-mono:       "JetBrains Mono", "SF Mono", Menlo, monospace;
 
@@ -164,14 +165,6 @@ section {
   align-items: center;
   gap: 0.75rem;
 }
-.eyebrow::before {
-  content: "";
-  width: 32px;
-  height: 1px;
-  background: var(--gold);
-  display: inline-block;
-  flex-shrink: 0;
-}
 
 .headline {
   font-family: var(--f-display);
@@ -185,23 +178,23 @@ section {
 .headline .line { display: block; }
 .headline em,
 .headline .accent {
-  font-family: var(--f-serif);
-  font-style: italic;
+  font-family: var(--f-script);
+  font-style: normal;
   font-weight: 400;
   text-transform: none;
-  letter-spacing: -0.005em;
+  letter-spacing: 0;
   background: linear-gradient(135deg, var(--gold-bright) 0%, var(--gold) 50%, var(--gold-deep) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   color: var(--gold);
-  font-size: 1.05em;
+  font-size: 1.2em;
   line-height: 0.95;
-  /* background-clip:text paints only inside the box, and this line-height is
-     shorter than the italic's descenders, so g/j got shaved off. Grow the paint
-     box and pull the same amount back off the layout. */
-  padding-bottom: 0.22em;
-  margin-bottom: -0.22em;
+  /* background-clip:text paints only inside the box, and the script's swashes
+     reach past it on every side. Grow the paint box and pull the same amount
+     back off the layout. */
+  padding: 0.22em 0.3em 0.3em;
+  margin: -0.22em -0.3em -0.3em;
 }
 .headline em.block,
 .headline .accent.block { display: block; }
@@ -216,8 +209,9 @@ h2.headline-md {
 }
 h2.headline-md em,
 h2.headline-md .accent {
-  font-family: var(--f-serif);
-  font-style: italic;
+  font-family: var(--f-script);
+  font-style: normal;
+  font-size: 1.2em;
   font-weight: 400;
   text-transform: none;
   background: linear-gradient(135deg, var(--gold-bright), var(--gold-deep));
@@ -225,8 +219,8 @@ h2.headline-md .accent {
   -webkit-text-fill-color: transparent;
   background-clip: text;
   color: var(--gold);
-  padding-bottom: 0.22em;
-  margin-bottom: -0.22em;
+  padding: 0.22em 0.3em 0.3em;
+  margin: -0.22em -0.3em -0.3em;
 }
 h2.headline-md em.block { display: block; }
 
@@ -556,42 +550,6 @@ p.muted { color: var(--muted); }
 }
 
 /* ---- 9. Marquee ---- */
-.marquee {
-  position: relative;
-  overflow: hidden;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  padding: 1.5rem 0;
-  background: linear-gradient(180deg, transparent, rgba(201,169,97,0.025), transparent);
-}
-.marquee-track {
-  display: flex;
-  width: max-content;
-  animation: marquee 50s linear infinite;
-}
-.marquee-track span {
-  font-family: var(--f-display);
-  font-weight: 800;
-  font-size: clamp(1.4rem, 3vw, 2.5rem);
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  color: var(--muted);
-  white-space: nowrap;
-  display: flex;
-  align-items: center;
-  padding-right: 4rem;
-}
-.marquee-track span::after {
-  content: "✦";
-  color: var(--gold);
-  font-size: 0.6em;
-  margin-left: 4rem;
-}
-.marquee:hover .marquee-track { animation-play-state: paused; }
-@keyframes marquee {
-  to { transform: translateX(-50%); }
-}
-
 /* ---- 10. Section heads, splits, grids ---- */
 .section-head {
   display: grid;
@@ -1216,7 +1174,6 @@ p.muted { color: var(--muted); }
     transition-duration: 0.001s !important;
   }
   .reveal { opacity: 1; transform: none; }
-  .marquee-track { animation: none; }
   .live .dot, .artist-label .dot { animation: none; }
 }
 
