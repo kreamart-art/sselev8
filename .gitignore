@@ -1,7 +1,8 @@
-.DS_Store
-Thumbs.db
 *.log
-node_modules/
-.vscode/
-.idea/
+.DS_Store
 .claude/
+.idea/
+.vscode/
+Thumbs.db
+data/
+node_modules/

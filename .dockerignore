@@ -3,5 +3,8 @@
 .claude
 .dockerignore
 Dockerfile
+node_modules
+data
+assets-src
 *.md
 .DS_Store
