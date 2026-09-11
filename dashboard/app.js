@@ -155,26 +155,241 @@ function renderOffline() {
   window.addEventListener('online', boot, { once: true })
 }
 
-// ---------- install as app ----------
+// ---------- install as app, notifications ----------
 let installEvent = null
 const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true
 const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+const isAndroid = () => /android/i.test(navigator.userAgent)
+const isMobile = () => window.matchMedia('(max-width: 820px)').matches && (window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0)
+const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
+
+// Closing a popup without acting hides it for a week on that device.
+const SNOOZE_MS = 7 * 86_400_000
+function snoozed(key) {
+  try {
+    return Date.now() < Number(localStorage.getItem(`elev8_snooze_${key}`) || 0)
+  } catch {
+    return false
+  }
+}
+function snooze(key) {
+  try {
+    localStorage.setItem(`elev8_snooze_${key}`, String(Date.now() + SNOOZE_MS))
+  } catch {
+    /* private mode: the popup just comes back next visit */
+  }
+}
+
+const svg = (body, filled = false) =>
+  `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="${filled ? 'currentColor' : 'none'}" stroke="${filled ? 'none' : 'currentColor'}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`
+const ICON = {
+  close: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
+  share: svg('<path d="M12 3.5v11M8 7.5l4-4 4 4"/><path d="M7.5 10.5H6.5a2 2 0 0 0-2 2v6.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-6.5a2 2 0 0 0-2-2h-1"/>'),
+  plus: svg('<rect x="4" y="4" width="16" height="16" rx="4"/><path d="M12 8.5v7M8.5 12h7"/>'),
+  dots: svg('<circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/>', true),
+  phone: svg('<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M12 7.5v6.5M9.5 11.5 12 14l2.5-2.5"/>'),
+  check: svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>'),
+  bell: svg('<path d="M6 9.5a6 6 0 1 1 12 0c0 5.5 2.5 7.5 2.5 7.5h-17S6 15 6 9.5"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/>'),
+}
+
+function openSheet(kind, inner) {
+  $('dialog.sheet')?.close()
+  document.body.insertAdjacentHTML(
+    'beforeend',
+    `<dialog class="sheet" aria-labelledby="sheet-title"><div class="sheet-body"><button type="button" class="sheet-close" data-close aria-label="Sluiten">${ICON.close}</button>${inner}</div></dialog>`,
+  )
+  const d = document.body.lastElementChild
+  // The dialog itself is only hit on the backdrop: .sheet-body fills the whole box.
+  d.addEventListener('click', (e) => {
+    if (e.target === d || e.target.closest('[data-close]')) d.close()
+  })
+  d.addEventListener('close', () => {
+    if (!d.dataset.done) snooze(kind)
+    d.remove()
+  })
+  d.showModal()
+  return d
+}
+
+const step = (icon, html) => `<li><span class="step-ico">${icon}</span><span>${html}</span></li>`
+
+function openInstallSheet() {
+  const d = openSheet(
+    'install',
+    `<div class="sheet-head"><img class="sheet-app" src="/dashboard/icons/icon-192.png" alt=""><h2 id="sheet-title">Zet het dashboard op je telefoon</h2></div>
+    <p class="sheet-lead">Dan open je het met één tik vanaf je beginscherm, net als een gewone app. En je kunt een melding krijgen bij elk nieuw bericht.</p>
+    <div class="seg sheet-tabs" role="tablist" aria-label="Soort telefoon"><button type="button" role="tab" data-os="ios">iPhone</button><button type="button" role="tab" data-os="android">Android</button></div>
+    <div data-os-panel="ios" role="tabpanel">
+      <ol class="steps">${step(ICON.share, 'Tik onderin Safari op het <strong>deelicoon</strong>. Zie je alleen drie puntjes, tik daar dan eerst op en kies <strong>Deel</strong>.')}${step(ICON.plus, 'Scroll omlaag en kies <strong>Zet op beginscherm</strong>.')}${step(ICON.check, 'Tik op <strong>Voeg toe</strong>. Het ELEV8-icoon staat nu op je beginscherm.')}</ol>
+      <p class="sheet-note">Op de iPhone werken meldingen alleen als je het dashboard via dat icoon opent. Kom je hier via Instagram, WhatsApp of Gmail, open de pagina dan eerst in Safari.</p>
+    </div>
+    <div data-os-panel="android" role="tabpanel">
+      ${installEvent ? '<button type="button" class="btn wide" data-install-now>Installeer de app</button><p class="sheet-note">Of via het menu van je browser:</p>' : ''}
+      <ol class="steps">${step(ICON.dots, 'Tik in Chrome rechtsboven op de <strong>drie puntjes</strong>.')}${step(ICON.phone, 'Kies <strong>App installeren</strong> of <strong>Toevoegen aan startscherm</strong>.')}${step(ICON.check, 'Tik op <strong>Installeren</strong>. Het ELEV8-icoon staat nu tussen je apps.')}</ol>
+      <p class="sheet-note">Samsung Internet: tik onderin op het menu en kies <strong>Pagina toevoegen aan</strong> en dan <strong>Startscherm</strong>.</p>
+    </div>
+    <div class="sheet-actions"><button type="button" class="btn ghost wide" data-close>Niet nu</button></div>`,
+  )
+  const show = (os) => {
+    $$('[data-os]', d).forEach((b) => {
+      b.classList.toggle('is-on', b.dataset.os === os)
+      b.setAttribute('aria-selected', String(b.dataset.os === os))
+    })
+    $$('[data-os-panel]', d).forEach((p) => (p.hidden = p.dataset.osPanel !== os))
+  }
+  show(isAndroid() ? 'android' : 'ios')
+  $$('[data-os]', d).forEach((b) => b.addEventListener('click', () => show(b.dataset.os)))
+  $('[data-install-now]', d)?.addEventListener('click', async () => {
+    if (!installEvent) return
+    installEvent.prompt()
+    const choice = await installEvent.userChoice
+    installEvent = null
+    if (choice.outcome !== 'accepted') return
+    d.dataset.done = '1'
+    d.close()
+    toast('Het dashboard staat nu als app op je telefoon')
+    if (pushSupported() && Notification.permission === 'default') setTimeout(openPushSheet, 800)
+  })
+}
+
+function openPushSheet() {
+  const d = openSheet(
+    'push',
+    `<div class="sheet-head"><span class="sheet-app sheet-bell">${ICON.bell}</span><h2 id="sheet-title">Meldingen aanzetten</h2></div>
+    <p class="sheet-lead">Krijg meteen een melding op deze telefoon als er een bericht via het contactformulier binnenkomt of als iemand zich aanmeldt voor de nieuwsbrief.</p>
+    <div class="notif-mock" aria-hidden="true"><img src="/dashboard/icons/icon-192.png" alt=""><div><span class="notif-app">ELEV8<span>nu</span></span><strong>Nieuw bericht van Sanne</strong><span class="notif-txt">Booking: Hoi! Wij zoeken een artiest voor ons festival in juni.</span></div></div>
+    <p class="sheet-note">Je telefoon vraagt daarna om toestemming. Kies dan <strong>Sta toe</strong> of <strong>Toestaan</strong>.</p>
+    <div class="sheet-actions"><button type="button" class="btn wide" data-enable autofocus>Meldingen aanzetten</button><button type="button" class="btn ghost wide" data-close>Niet nu</button></div>`,
+  )
+  const btn = $('[data-enable]', d)
+  btn.addEventListener('click', async () => {
+    btn.disabled = true
+    try {
+      await enablePush()
+      d.dataset.done = '1'
+      d.close()
+    } catch (err) {
+      toast(err.message, true)
+    } finally {
+      btn.disabled = false
+    }
+  })
+}
+
+const keyBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0))
+
+async function pushSubscription(create) {
+  const reg = await Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('De app is nog aan het laden. Probeer het zo opnieuw.')), 8000)),
+  ])
+  let sub = await reg.pushManager.getSubscription()
+  const key = keyBytes(me.push.key)
+  const current = sub?.options?.applicationServerKey
+  // A subscription made with an older server key can no longer receive anything.
+  if (sub && current && !new Uint8Array(current).every((b, i) => b === key[i])) {
+    await sub.unsubscribe()
+    sub = null
+  }
+  if (!sub && create) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key })
+  return sub
+}
+
+async function enablePush() {
+  const perm = await Notification.requestPermission()
+  if (perm === 'denied') throw new Error('Meldingen zijn geblokkeerd. Zet ze aan in de instellingen van je telefoon.')
+  if (perm !== 'granted') throw new Error('Meldingen staan nog uit.')
+  const sub = await pushSubscription(true)
+  await api('/push/subscribe', { method: 'POST', body: { subscription: sub.toJSON() } })
+  toast('Meldingen staan aan. Je krijgt zo een testmelding.')
+  api('/push/test', { method: 'POST' }).catch(() => {})
+}
+
+async function disablePush() {
+  if (!pushSupported() || !me?.push) return
+  const sub = await pushSubscription(false).catch(() => null)
+  if (!sub) return
+  await api('/push/unsubscribe', { method: 'POST', body: { endpoint: sub.endpoint } }).catch(() => {})
+  await sub.unsubscribe().catch(() => {})
+}
+
+// Keeps the server in step with this device, for example after logging in again.
+async function syncPush() {
+  if (!pushSupported() || Notification.permission !== 'granted' || !me?.push) return
+  try {
+    const sub = await pushSubscription(true)
+    await api('/push/subscribe', { method: 'POST', body: { subscription: sub.toJSON() } })
+  } catch {
+    /* the Account page shows the state */
+  }
+}
+
+let prompted = false
+function maybePrompt() {
+  if (prompted || !me || !isMobile() || $('dialog.sheet')) return
+  prompted = true
+  if (!isStandalone() && !snoozed('install')) openInstallSheet()
+  else if (pushSupported() && Notification.permission === 'default' && !snoozed('push')) openPushSheet()
+}
+
+async function paintPush() {
+  const slot = $('[data-push-slot]')
+  if (!slot) return
+  let text
+  let actions = ''
+  if (!pushSupported()) {
+    text =
+      isIOS() && !isStandalone()
+        ? 'Op de iPhone werken meldingen alleen in de app. Zet het dashboard eerst op je beginscherm en open het daarvandaan.'
+        : 'Deze browser kan geen meldingen ontvangen.'
+  } else if (Notification.permission === 'denied') {
+    text = 'Meldingen zijn geblokkeerd voor deze site. Zet ze aan in de instellingen van je telefoon of browser en kom dan hier terug.'
+  } else if (Notification.permission === 'granted' && (await pushSubscription(false).catch(() => null))) {
+    text = 'Meldingen staan aan op dit apparaat. Je krijgt er een bij elk nieuw bericht en elke nieuwe aanmelding voor de nieuwsbrief.'
+    actions = '<button type="button" class="btn ghost" data-push-test>Stuur een testmelding</button><button type="button" class="link" data-push-off>Uitzetten</button>'
+  } else {
+    text = 'Meldingen staan uit op dit apparaat. Zet ze aan voor een melding bij elk nieuw bericht en elke nieuwe aanmelding voor de nieuwsbrief.'
+    actions = '<button type="button" class="btn" data-push-on>Meldingen aanzetten</button>'
+  }
+  if (!slot.isConnected) return
+  slot.innerHTML = `<section class="card install"><div><h2>Meldingen</h2><p class="muted-text">${text}</p></div>${actions ? `<div class="install-actions">${actions}</div>` : ''}</section>`
+  $('[data-push-on]', slot)?.addEventListener('click', async (e) => {
+    e.currentTarget.disabled = true
+    await enablePush().catch((err) => toast(err.message, true))
+    paintPush()
+  })
+  $('[data-push-test]', slot)?.addEventListener('click', async () => {
+    try {
+      await api('/push/test', { method: 'POST' })
+      toast('Testmelding verstuurd')
+    } catch (err) {
+      toast(err.message, true)
+    }
+  })
+  $('[data-push-off]', slot)?.addEventListener('click', async () => {
+    await disablePush()
+    toast('Meldingen staan uit op dit apparaat')
+    paintPush()
+  })
+}
 
 function installHtml(dismissible) {
   if (isStandalone()) return ''
-  if (dismissible && localStorage.getItem('elev8_install_hidden')) return ''
-  const ios = isIOS()
-  if (!ios && !installEvent) return ''
+  const guide = isMobile() || isIOS()
+  // On phones the popup does this job, so the overview card would only repeat it.
+  if (dismissible && (isMobile() || localStorage.getItem('elev8_install_hidden'))) return ''
+  if (!guide && !installEvent) return ''
   return `<section class="card install" data-install-card><div><h2>Dashboard als app</h2><p class="muted-text">${
-    ios
-      ? 'Tik in Safari op het deelicoon en kies Zet op beginscherm. Dan open je het dashboard voortaan met één tik, met het ELEV8-logo als icoon.'
-      : 'Zet het dashboard als app op je telefoon of computer, met het ELEV8-logo als icoon.'
-  }</p></div><div class="install-actions">${ios ? '' : '<button type="button" class="btn" data-install>Installeer als app</button>'}${dismissible ? '<button type="button" class="link" data-install-hide>Niet nu</button>' : ''}</div></section>`
+    guide
+      ? 'Zet het dashboard op je beginscherm. Dan open je het met één tik, met het ELEV8-logo als icoon, en kun je meldingen krijgen.'
+      : 'Zet het dashboard als app op je computer, met het ELEV8-logo als icoon.'
+  }</p></div><div class="install-actions">${guide ? '<button type="button" class="btn" data-install-guide>Bekijk hoe</button>' : '<button type="button" class="btn" data-install>Installeer als app</button>'}${dismissible ? '<button type="button" class="link" data-install-hide>Niet nu</button>' : ''}</div></section>`
 }
 
 function paintInstall() {
   $$('[data-install-slot]').forEach((slot) => {
     slot.innerHTML = installHtml(slot.dataset.installSlot === 'dismissible')
+    $('[data-install-guide]', slot)?.addEventListener('click', openInstallSheet)
     $('[data-install]', slot)?.addEventListener('click', async () => {
       if (!installEvent) return
       installEvent.prompt()
@@ -242,6 +457,8 @@ function renderShell() {
   $('[data-logout]').addEventListener('click', async () => {
     if (dirty && !confirm('Je hebt wijzigingen die nog niet zijn opgeslagen. Toch uitloggen?')) return
     dirty = false
+    // A logged-out phone should not keep showing message previews.
+    await disablePush()
     await api('/logout', { method: 'POST' }).catch(() => {})
     location.href = '/dashboard/'
   })
@@ -305,6 +522,8 @@ async function boot() {
   window.addEventListener('hashchange', onHashChange)
   refreshCounts()
   route()
+  syncPush()
+  setTimeout(maybePrompt, 1200)
 }
 
 // ---------- building blocks ----------
@@ -989,6 +1208,7 @@ async function viewAccount(el) {
   const users = await api('/users')
   el.innerHTML = `${pageHead('Account', `Ingelogd als ${esc(me.user.email)}.`)}
   <div data-install-slot="fixed"></div>
+  <div data-push-slot></div>
   <section class="grid-2">
     <form class="card" data-pass novalidate>
       <h2>Wachtwoord wijzigen</h2>
@@ -1019,6 +1239,7 @@ async function viewAccount(el) {
   </section>`
 
   paintInstall()
+  paintPush()
   const pass = $('[data-pass]', el)
   pass.addEventListener('submit', async (e) => {
     e.preventDefault()
@@ -1075,6 +1296,13 @@ async function viewAccount(el) {
   )
 }
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/dashboard/sw.js', { scope: '/dashboard/' }).catch(() => {})
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/dashboard/sw.js', { scope: '/dashboard/' }).catch(() => {})
+  // A tapped notification sends the open window to its page (see sw.js).
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    const to = e.data?.open
+    if (typeof to === 'string' && to.startsWith('/dashboard/')) location.href = to
+  })
+}
 
 boot()

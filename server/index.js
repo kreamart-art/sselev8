@@ -8,6 +8,7 @@ import { markdown, excerpt, slugify, esc } from './content.js'
 import { saveImage, deleteImage } from './images.js'
 import { gaConfigured, gaSummary } from './ga.js'
 import { scheduleBackups } from './backup.js'
+import * as push from './push.js'
 import * as r from './render.js'
 
 const PORT = Number(process.env.PORT) || 5460
@@ -254,14 +255,21 @@ app.post('/api/contact', publicJson, (req, res) => {
   const email = str(b.email, 200).toLowerCase()
   const message = str(b.message, 5000)
   if (!name || !EMAIL_RE.test(email) || message.length < 2) throw fail(400, 'invalid')
-  db.prepare('INSERT INTO messages (name, email, topic, body, lang, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(
+  const topic = str(b.topic, 80)
+  const { lastInsertRowid } = db.prepare('INSERT INTO messages (name, email, topic, body, lang, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(
     name,
     email,
-    str(b.topic, 80),
+    topic,
     message,
     b.lang === 'en' ? 'en' : 'nl',
     now(),
   )
+  push.notify({
+    title: `Nieuw bericht van ${name}`,
+    body: `${topic ? `${topic}: ` : ''}${message.replace(/\s+/g, ' ').slice(0, 160)}`,
+    url: '/dashboard/#/berichten',
+    tag: `message-${lastInsertRowid}`,
+  })
   res.json({ ok: true })
 })
 
@@ -272,10 +280,14 @@ app.post('/api/subscribe', publicJson, (req, res) => {
   if (!auth.rateLimit(`sub:${req.ip}`, 5, 10 * 60_000)) throw fail(429, 'rate')
   const email = str(b.email, 200).toLowerCase()
   if (!EMAIL_RE.test(email)) throw fail(400, 'invalid')
+  const before = db.prepare('SELECT unsubscribed_at FROM subscribers WHERE email = ?').get(email)
   db.prepare(
     `INSERT INTO subscribers (email, lang, created_at, unsub_token) VALUES (?, ?, ?, ?)
      ON CONFLICT(email) DO UPDATE SET unsubscribed_at = NULL, lang = excluded.lang`,
   ).run(email, b.lang === 'en' ? 'en' : 'nl', now(), crypto.randomBytes(18).toString('base64url'))
+  if (!before || before.unsubscribed_at) {
+    push.notify({ title: 'Nieuwe aanmelding voor de nieuwsbrief', body: email, url: '/dashboard/#/nieuwsbrief', tag: `subscriber-${email}` })
+  }
   res.json({ ok: true })
 })
 
@@ -330,7 +342,33 @@ admin.use((req, res, next) => {
   next()
 })
 
-admin.get('/me', (req, res) => res.json({ user: req.user, ga: { measurement: Boolean(GA_ID), reporting: gaConfigured() }, staging: STAGING }))
+admin.get('/me', (req, res) =>
+  res.json({ user: req.user, ga: { measurement: Boolean(GA_ID), reporting: gaConfigured() }, staging: STAGING, push: { key: push.PUBLIC_KEY } }),
+)
+
+// push notifications, one subscription per device
+const B64URL = /^[\w-]{16,200}={0,2}$/
+admin.post('/push/subscribe', (req, res) => {
+  const s = req.body?.subscription || {}
+  const endpoint = str(s.endpoint, 1000)
+  if (!/^https:\/\/[^\s<>"]+$/.test(endpoint) || !B64URL.test(s.keys?.p256dh || '') || !B64URL.test(s.keys?.auth || '')) {
+    throw fail(400, 'Deze aanmelding voor meldingen klopt niet.')
+  }
+  push.saveSubscription(req.user.id, { endpoint, p256dh: s.keys.p256dh, auth: s.keys.auth })
+  res.json({ ok: true })
+})
+admin.post('/push/unsubscribe', (req, res) => {
+  push.removeSubscription(str(req.body?.endpoint, 1000), req.user.id)
+  res.json({ ok: true })
+})
+admin.post('/push/test', async (req, res) => {
+  const sent = await push.notify(
+    { title: 'Meldingen staan aan', body: 'Zo ziet een melding van het ELEV8-dashboard eruit.', url: '/dashboard/#/account', tag: 'test' },
+    { userId: req.user.id },
+  )
+  if (!sent) throw fail(400, 'De testmelding kon niet worden verstuurd. Zet de meldingen op dit apparaat uit en weer aan.')
+  res.json({ sent })
+})
 
 admin.get('/overview', (req, res) => {
   const start = dayStr(now() - 29 * DAY)

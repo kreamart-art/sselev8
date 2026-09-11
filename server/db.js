@@ -101,6 +101,15 @@ CREATE TABLE IF NOT EXISTS pageviews (
   views INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (day, path)
 );
+-- Web push per device. Deleting a user removes their devices too.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  endpoint TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  last_ok_at INTEGER
+);
 CREATE INDEX IF NOT EXISTS posts_status_pub ON posts(status, published_at);
 CREATE INDEX IF NOT EXISTS messages_created ON messages(created_at);
 `)
