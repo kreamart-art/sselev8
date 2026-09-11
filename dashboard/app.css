@@ -230,3 +230,8 @@ details.card[open] summary { margin-bottom: 18px; }
 @media (max-width: 860px) {
   .grid-kpi { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
 }
+
+/* install card */
+.install { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; margin-bottom: 14px; }
+.install p { margin-top: 6px; max-width: 60ch; }
+.install-actions { display: flex; align-items: center; gap: 16px; }

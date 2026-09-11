@@ -38,7 +38,7 @@ async function api(path, { method = 'GET', body, form } = {}) {
   try {
     res = await fetch(`/api/admin${path}`, opts)
   } catch {
-    throw new Error('Geen verbinding. Controleer je internet en probeer het opnieuw.')
+    throw Object.assign(new Error('Geen verbinding. Controleer je internet en probeer het opnieuw.'), { offline: true })
   }
   const data = await res.json().catch(() => ({}))
   if (res.status === 401 && !['/login', '/me'].includes(path)) {
@@ -149,6 +149,57 @@ async function renderTokenPage(token) {
   })
 }
 
+function renderOffline() {
+  app.innerHTML = `<div class="auth"><div class="card auth-card"><img class="auth-logo" src="/logo.png" alt="S&amp;S ELEV8"><h1>Geen verbinding</h1><p>Het dashboard heeft internet nodig om je gegevens op te halen. Zodra je weer online bent, gaat het vanzelf verder.</p><button class="btn wide" type="button" data-retry>Opnieuw proberen</button></div></div>`
+  $('[data-retry]').addEventListener('click', boot)
+  window.addEventListener('online', boot, { once: true })
+}
+
+// ---------- install as app ----------
+let installEvent = null
+const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+
+function installHtml(dismissible) {
+  if (isStandalone()) return ''
+  if (dismissible && localStorage.getItem('elev8_install_hidden')) return ''
+  const ios = isIOS()
+  if (!ios && !installEvent) return ''
+  return `<section class="card install" data-install-card><div><h2>Dashboard als app</h2><p class="muted-text">${
+    ios
+      ? 'Tik in Safari op het deelicoon en kies Zet op beginscherm. Dan open je het dashboard voortaan met één tik, met het ELEV8-logo als icoon.'
+      : 'Zet het dashboard als app op je telefoon of computer, met het ELEV8-logo als icoon.'
+  }</p></div><div class="install-actions">${ios ? '' : '<button type="button" class="btn" data-install>Installeer als app</button>'}${dismissible ? '<button type="button" class="link" data-install-hide>Niet nu</button>' : ''}</div></section>`
+}
+
+function paintInstall() {
+  $$('[data-install-slot]').forEach((slot) => {
+    slot.innerHTML = installHtml(slot.dataset.installSlot === 'dismissible')
+    $('[data-install]', slot)?.addEventListener('click', async () => {
+      if (!installEvent) return
+      installEvent.prompt()
+      const choice = await installEvent.userChoice
+      installEvent = null
+      if (choice.outcome === 'accepted') toast('Het dashboard staat nu als app op je apparaat')
+      paintInstall()
+    })
+    $('[data-install-hide]', slot)?.addEventListener('click', () => {
+      localStorage.setItem('elev8_install_hidden', '1')
+      paintInstall()
+    })
+  })
+}
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault()
+  installEvent = e
+  paintInstall()
+})
+window.addEventListener('appinstalled', () => {
+  installEvent = null
+  paintInstall()
+})
+
 // ---------- shell & routing ----------
 const NAV = [
   ['overzicht', '#/', 'Overzicht'],
@@ -246,8 +297,8 @@ async function boot() {
   if (token) return renderTokenPage(token)
   try {
     me = await api('/me')
-  } catch {
-    return renderLogin()
+  } catch (e) {
+    return e.offline ? renderOffline() : renderLogin()
   }
   renderShell()
   window.removeEventListener('hashchange', onHashChange)
@@ -368,6 +419,7 @@ async function viewOverview(el) {
   const o = await api('/overview')
   const first = esc((me.user.name || '').split(' ')[0])
   el.innerHTML = `${pageHead('Overzicht', `Welkom${first ? `, ${first}` : ''}. Zo gaat het met de site.`, '<a class="btn" href="#/nieuws/nieuw">Nieuw bericht</a>')}
+  <div data-install-slot="dismissible"></div>
   <section class="grid-kpi">
     ${kpi('Paginaweergaven', o.views7, 'laatste 7 dagen')}
     ${kpi('Paginaweergaven', o.views30, 'laatste 30 dagen')}
@@ -398,6 +450,7 @@ async function viewOverview(el) {
   </section>
   <section data-ga></section>`
   wireCharts(el)
+  paintInstall()
   loadGa($('[data-ga]', el), 30)
 }
 
@@ -935,6 +988,7 @@ const linkBox = (link, text) =>
 async function viewAccount(el) {
   const users = await api('/users')
   el.innerHTML = `${pageHead('Account', `Ingelogd als ${esc(me.user.email)}.`)}
+  <div data-install-slot="fixed"></div>
   <section class="grid-2">
     <form class="card" data-pass novalidate>
       <h2>Wachtwoord wijzigen</h2>
@@ -964,6 +1018,7 @@ async function viewAccount(el) {
     <div data-team-result></div>
   </section>`
 
+  paintInstall()
   const pass = $('[data-pass]', el)
   pass.addEventListener('submit', async (e) => {
     e.preventDefault()
@@ -1019,5 +1074,7 @@ async function viewAccount(el) {
     }),
   )
 }
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/dashboard/sw.js', { scope: '/dashboard/' }).catch(() => {})
 
 boot()
