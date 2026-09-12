@@ -266,37 +266,50 @@ function mailAlert({ name, email, topic, message }) {
 const publicJson = express.json({ limit: '20kb' })
 
 app.post('/api/contact', publicJson, (req, res) => {
-  if (!sameOrigin(req)) throw fail(403, 'forbidden')
+  if (!sameOrigin(req)) {
+    console.warn('[contact] rejected: foreign origin')
+    throw fail(403, 'forbidden')
+  }
   const b = req.body || {}
-  if (b.website) return res.json({ ok: true })
-  if (!auth.rateLimit(`contact:${req.ip}`, 5, 10 * 60_000)) throw fail(429, 'rate')
+  // Only bots should fill the hidden field. The message is kept anyway, marked as possible spam
+  // and without alerts, so a real visitor whose browser autofilled it is never silently lost.
+  const spam = Boolean(b.website || b.elev8_hp)
+  if (!auth.rateLimit(`contact:${req.ip}`, 5, 10 * 60_000)) {
+    console.warn('[contact] rejected: rate limit')
+    throw fail(429, 'rate')
+  }
   const name = str(b.name, 120)
   const email = str(b.email, 200).toLowerCase()
   const message = str(b.message, 5000)
-  if (!name || !EMAIL_RE.test(email) || message.length < 2) throw fail(400, 'invalid')
+  if (!name || !EMAIL_RE.test(email) || message.length < 2) {
+    console.warn('[contact] rejected: missing or invalid fields')
+    throw fail(400, 'invalid')
+  }
   const topic = str(b.topic, 80)
-  const { lastInsertRowid } = db.prepare('INSERT INTO messages (name, email, topic, body, lang, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(
-    name,
-    email,
-    topic,
-    message,
-    b.lang === 'en' ? 'en' : 'nl',
-    now(),
-  )
-  push.notify({
-    title: `Nieuw bericht van ${name}`,
-    body: `${topic ? `${topic}: ` : ''}${message.replace(/\s+/g, ' ').slice(0, 160)}`,
-    url: '/dashboard/#/berichten',
-    tag: `message-${lastInsertRowid}`,
-  })
-  mailAlert({ name, email, topic, message })
+  const t = now()
+  const { lastInsertRowid } = db
+    .prepare('INSERT INTO messages (name, email, topic, body, lang, created_at, spam, handled_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(name, email, topic, message, b.lang === 'en' ? 'en' : 'nl', t, spam ? 1 : 0, spam ? t : null)
+  console.log(`[contact] saved #${lastInsertRowid}${spam ? ' as possible spam (hidden field was filled)' : ''}`)
+  if (!spam) {
+    push.notify({
+      title: `Nieuw bericht van ${name}`,
+      body: `${topic ? `${topic}: ` : ''}${message.replace(/\s+/g, ' ').slice(0, 160)}`,
+      url: '/dashboard/#/berichten',
+      tag: `message-${lastInsertRowid}`,
+    })
+    mailAlert({ name, email, topic, message })
+  }
   res.json({ ok: true })
 })
 
 app.post('/api/subscribe', publicJson, (req, res) => {
   if (!sameOrigin(req)) throw fail(403, 'forbidden')
   const b = req.body || {}
-  if (b.website) return res.json({ ok: true })
+  if (b.website || b.elev8_hp) {
+    console.warn('[subscribe] dropped: hidden field was filled')
+    return res.json({ ok: true })
+  }
   if (!auth.rateLimit(`sub:${req.ip}`, 5, 10 * 60_000)) throw fail(429, 'rate')
   const email = str(b.email, 200).toLowerCase()
   if (!EMAIL_RE.test(email)) throw fail(400, 'invalid')
@@ -608,7 +621,7 @@ admin.post('/messages/:id/reply', async (req, res) => {
     body,
     '',
     en ? 'Kind regards,' : 'Met vriendelijke groet,',
-    (req.user.name || '').split(' ')[0],
+    req.user.name || '',
     'S&S ELEV8 Entertainment',
     r.BASE_URL.replace(/^https?:\/\//, ''),
     '',

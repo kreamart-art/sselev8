@@ -170,7 +170,7 @@
     if (topic) f.namedItem('topic').value = topic;
     var artist = (q.get('artist') || '').replace(/[^a-z0-9-]/gi, '');
     if (artist && !f.namedItem('message').value) {
-      f.namedItem('message').value = (lang() === 'en' ? 'Booking inquiry for ' : 'Booking aanvraag voor ') + artist.toUpperCase() + '\n\n';
+      f.namedItem('message').value = (lang() === 'en' ? 'Booking inquiry for ' : 'Booking aanvraag voor ') + artist.replace(/-/g, ' ').toUpperCase() + '\n\n';
     }
     form.addEventListener('submit', function (e) {
       e.preventDefault();
@@ -179,7 +179,7 @@
         email: f.namedItem('email').value.trim(),
         topic: f.namedItem('topic').value,
         message: f.namedItem('message').value.trim(),
-        website: f.namedItem('website').value,
+        elev8_hp: f.namedItem('elev8_hp').value,
         lang: lang()
       };
       if (!data.name || !data.message) return say(form, t('required'), true);
@@ -205,7 +205,7 @@
       if (!EMAIL.test(email)) return say(form, t('email'), true);
       var btn = $('button[type=submit]', form);
       btn.disabled = true;
-      post('/api/subscribe', { email: email, website: f.namedItem('website').value, lang: lang() })
+      post('/api/subscribe', { email: email, elev8_hp: f.namedItem('elev8_hp').value, lang: lang() })
         .then(function (r) {
           if (r.ok) { form.reset(); say(form, t('subOk')); track('sign_up', { method: 'newsletter' }); }
           else say(form, r.status === 429 ? t('rate') : t('error'), true);

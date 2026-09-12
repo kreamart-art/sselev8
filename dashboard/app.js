@@ -941,7 +941,7 @@ async function viewPostEditor(el, id) {
   <form class="editor" data-post novalidate>
     <div class="editor-main">
       <div class="card">
-        <div class="field"><label for="p-title">Titel</label><input id="p-title" name="title_nl" maxlength="200" value="${esc(p.title_nl)}" placeholder="Bijvoorbeeld: KREAM brengt nieuwe single uit"></div>
+        <div class="field"><label for="p-title">Titel</label><input id="p-title" name="title_nl" maxlength="200" value="${esc(p.title_nl)}" placeholder="Bijvoorbeeld: KRM KRUEGER brengt nieuwe single uit"></div>
         <div class="field"><label for="p-excerpt">Korte samenvatting <span class="opt">optioneel, staat in het overzicht en bij het delen van de link</span></label><textarea id="p-excerpt" name="excerpt_nl" rows="2" maxlength="400">${esc(p.excerpt_nl)}</textarea></div>
         <div class="field">${mdField('body_nl', 'Tekst', p.body_nl)}</div>
       </div>
@@ -1154,8 +1154,9 @@ async function viewMessages(el) {
       : ''
     return `<article class="card msg${m.handled_at ? ' is-done' : ''}" data-id="${m.id}">
       <div class="msg-head"><div class="who"><strong>${esc(m.name)}</strong><a href="mailto:${esc(m.email)}">${esc(m.email)}</a></div>
-      <div class="row-sub">${m.handled_at ? '<span class="badge muted">Afgehandeld</span>' : '<span class="badge warn">Nieuw</span>'}${m.topic ? `<span class="badge">${esc(m.topic)}</span>` : ''}<span>${fmtDateTime(m.created_at)}</span></div></div>
+      <div class="row-sub">${m.spam ? '<span class="badge muted">Mogelijk spam</span>' : m.handled_at ? '<span class="badge muted">Afgehandeld</span>' : '<span class="badge warn">Nieuw</span>'}${m.topic ? `<span class="badge">${esc(m.topic)}</span>` : ''}<span>${fmtDateTime(m.created_at)}</span></div></div>
       <p class="msg-body">${esc(m.body)}</p>
+      ${m.spam ? '<p class="hint" style="margin-top:10px">Bij dit bericht was een verborgen veld ingevuld dat alleen robots zien. Het kan spam zijn, of een echte bezoeker wiens browser het automatisch invulde. Daarom kwam er geen melding voor.</p>' : ''}
       ${replies}
       <div class="msg-actions">${
         canMail ? `<button type="button" class="btn" data-reply>${m.replies.length ? 'Nog een antwoord' : 'Beantwoorden'}</button>` : `<a class="btn" href="${mailto}">Beantwoorden</a>`
@@ -1298,7 +1299,7 @@ async function viewSettings(el) {
     <p class="muted-text" style="margin:6px 0 16px">Een korte melding bovenaan elke pagina, bijvoorbeeld voor een event of een nieuwe release. Bezoekers kunnen hem wegklikken.</p>
     <label class="check"><input type="checkbox" name="enabled" ${a.enabled ? 'checked' : ''}> Tonen op de site</label>
     <div class="row-2" style="margin-top:16px">
-      <div class="field"><label for="an-nl">Tekst</label><input id="an-nl" name="text_nl" maxlength="160" value="${esc(a.text_nl)}" placeholder="Bijvoorbeeld: Nieuwe single van KREAM, nu te luisteren"></div>
+      <div class="field"><label for="an-nl">Tekst</label><input id="an-nl" name="text_nl" maxlength="160" value="${esc(a.text_nl)}" placeholder="Bijvoorbeeld: Nieuwe single van KRM KRUEGER, nu te luisteren"></div>
       <div class="field"><label for="an-en">Tekst in het Engels <span class="opt">optioneel</span></label><input id="an-en" name="text_en" maxlength="160" value="${esc(a.text_en)}"></div>
     </div>
     <div class="field"><label for="an-link">Link <span class="opt">optioneel, bijvoorbeeld /blog of https://open.spotify.com/...</span></label><input id="an-link" name="link" maxlength="300" value="${esc(a.link)}"></div>

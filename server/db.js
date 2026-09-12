@@ -80,7 +80,8 @@ CREATE TABLE IF NOT EXISTS messages (
   body TEXT NOT NULL,
   lang TEXT NOT NULL DEFAULT 'nl',
   created_at INTEGER NOT NULL,
-  handled_at INTEGER
+  handled_at INTEGER,
+  spam INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS subscribers (
   id INTEGER PRIMARY KEY,
@@ -124,6 +125,11 @@ CREATE INDEX IF NOT EXISTS posts_status_pub ON posts(status, published_at);
 CREATE INDEX IF NOT EXISTS messages_created ON messages(created_at);
 `)
 
+// Columns added after the first release; CREATE TABLE above already has them for new databases.
+if (!db.prepare("SELECT 1 FROM pragma_table_info('messages') WHERE name = 'spam'").get()) {
+  db.exec('ALTER TABLE messages ADD COLUMN spam INTEGER NOT NULL DEFAULT 0')
+}
+
 export function getSetting(key, fallback) {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key)
   if (!row) return fallback
@@ -151,13 +157,13 @@ function seed() {
       `INSERT INTO artists (slug, name, tagline_nl, tagline_en, bio_nl, bio_en, photo, since, links, featured, visible, sort, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, '{}', 1, 1, 0, ?, ?)`,
     ).run(
-      'kream',
-      'KREAM',
+      'krm-krueger',
+      'KRM KRUEGER',
       'Soul-electronic, geworteld in Amsterdam.',
       'Soul-electronic, anchored in Amsterdam.',
-      'Een stem die geen aandacht vraagt, maar het verdient. KREAM beweegt tussen R&B, soul en elektronische texturen met een kalme autoriteit die je herinnert aan wat ingehoudenheid klinkt.',
-      "A voice that doesn't ask for attention, it earns it. KREAM moves between R&B, soul, and electronic textures with a calm authority that reminds you what restraint sounds like.",
-      '/img/kream.webp',
+      'Een stem die geen aandacht vraagt, maar het verdient. KRM KRUEGER beweegt tussen R&B, soul en elektronische texturen met een kalme autoriteit die je herinnert aan wat ingehoudenheid klinkt.',
+      "A voice that doesn't ask for attention, it earns it. KRM KRUEGER moves between R&B, soul, and electronic textures with a calm authority that reminds you what restraint sounds like.",
+      '/img/krm-krueger.webp',
       '2026',
       t,
       t,

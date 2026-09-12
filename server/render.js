@@ -142,7 +142,7 @@ ${socialLinks(settings.socials)}
 <form class="subscribe" data-subscribe novalidate>
 <label class="sr-only" for="sub-email">E-mail</label>
 <input type="email" id="sub-email" name="email" required autocomplete="email" placeholder="jouw@email.nl" data-placeholder-nl="jouw@email.nl" data-placeholder-en="your@email.com">
-<input type="text" name="website" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+<input type="text" name="elev8_hp" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true" data-1p-ignore data-lpignore="true" data-form-type="other">
 <button type="submit" class="btn">${bi('Aanmelden', 'Subscribe')}</button>
 <p class="form-msg" role="status" aria-live="polite"></p>
 </form>
