@@ -222,6 +222,8 @@ const ICON = {
   phone: svg('<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M12 7.5v6.5M9.5 11.5 12 14l2.5-2.5"/>'),
   check: svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>'),
   bell: svg('<path d="M6 9.5a6 6 0 1 1 12 0c0 5.5 2.5 7.5 2.5 7.5h-17S6 15 6 9.5"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/>'),
+  download: svg('<path d="M12 4v10.5M7.5 10 12 14.5 16.5 10"/><path d="M5 19.5h14"/>'),
+  chevron: svg('<path d="M9.5 6l6 6-6 6"/>'),
 }
 
 function openSheet(kind, inner) {
@@ -231,6 +233,7 @@ function openSheet(kind, inner) {
     `<dialog class="sheet" aria-labelledby="sheet-title"><div class="sheet-body"><button type="button" class="sheet-close" data-close aria-label="Sluiten">${ICON.close}</button>${inner}</div></dialog>`,
   )
   const d = document.body.lastElementChild
+  d.dataset.kind = kind
   // The dialog itself is only hit on the backdrop: .sheet-body fills the whole box.
   d.addEventListener('click', (e) => {
     if (e.target === d || e.target.closest('[data-close]')) d.close()
@@ -245,6 +248,34 @@ function openSheet(kind, inner) {
 
 const step = (icon, html) => `<li><span class="step-ico">${icon}</span><span>${html}</span></li>`
 
+const menuSteps = () =>
+  `<ol class="steps">${step(ICON.dots, 'Tik in Chrome rechtsboven op de <strong>drie puntjes</strong>.')}${step(ICON.phone, 'Kies <strong>App installeren</strong> of <strong>Toevoegen aan startscherm</strong>.')}${step(ICON.check, 'Tik op <strong>Installeren</strong>. Het ELEV8-icoon staat nu tussen je apps.')}</ol>
+  <p class="sheet-note">Samsung Internet: tik onderin op het menu en kies <strong>Pagina toevoegen aan</strong> en dan <strong>Startscherm</strong>.</p>`
+
+// Chrome hands out its one-tap install (beforeinstallprompt) only once the page counts as
+// used, so this panel is redrawn when that moment arrives while the popup is open.
+function paintAndroidPanel(d) {
+  const panel = $('[data-os-panel="android"]', d)
+  if (!panel) return
+  panel.innerHTML = installEvent
+    ? `<button type="button" class="btn wide" data-install-now>${ICON.download}Installeer de app</button>
+      <p class="sheet-note">Eén tik, dan staat het ELEV8-icoon tussen je apps en op je startscherm.</p>
+      <details class="sheet-more"><summary>${ICON.chevron}Liever via het menu van je browser</summary>${menuSteps()}</details>`
+    : `${isAndroid() ? '' : '<p class="sheet-note">Op een Android-telefoon staat hier een knop <strong>Installeer de app</strong>. Via het menu kan het ook:</p>'}${menuSteps()}`
+  $('[data-install-now]', panel)?.addEventListener('click', async () => {
+    if (!installEvent) return
+    installEvent.prompt()
+    const choice = await installEvent.userChoice
+    // A prompt can only be used once; Chrome sends a fresh one later if needed.
+    installEvent = null
+    if (choice.outcome !== 'accepted') return paintAndroidPanel(d)
+    d.dataset.done = '1'
+    d.close()
+    toast('Het dashboard staat nu als app op je telefoon')
+    if (pushSupported() && Notification.permission === 'default') setTimeout(openPushSheet, 800)
+  })
+}
+
 function openInstallSheet() {
   const d = openSheet(
     'install',
@@ -255,13 +286,10 @@ function openInstallSheet() {
       <ol class="steps">${step(ICON.share, 'Tik onderin Safari op het <strong>deelicoon</strong>. Zie je alleen drie puntjes, tik daar dan eerst op en kies <strong>Deel</strong>.')}${step(ICON.plus, 'Scroll omlaag en kies <strong>Zet op beginscherm</strong>.')}${step(ICON.check, 'Tik op <strong>Voeg toe</strong>. Het ELEV8-icoon staat nu op je beginscherm.')}</ol>
       <p class="sheet-note">Op de iPhone werken meldingen alleen als je het dashboard via dat icoon opent. Kom je hier via Instagram, WhatsApp of Gmail, open de pagina dan eerst in Safari.</p>
     </div>
-    <div data-os-panel="android" role="tabpanel">
-      ${installEvent ? '<button type="button" class="btn wide" data-install-now>Installeer de app</button><p class="sheet-note">Of via het menu van je browser:</p>' : ''}
-      <ol class="steps">${step(ICON.dots, 'Tik in Chrome rechtsboven op de <strong>drie puntjes</strong>.')}${step(ICON.phone, 'Kies <strong>App installeren</strong> of <strong>Toevoegen aan startscherm</strong>.')}${step(ICON.check, 'Tik op <strong>Installeren</strong>. Het ELEV8-icoon staat nu tussen je apps.')}</ol>
-      <p class="sheet-note">Samsung Internet: tik onderin op het menu en kies <strong>Pagina toevoegen aan</strong> en dan <strong>Startscherm</strong>.</p>
-    </div>
+    <div data-os-panel="android" role="tabpanel"></div>
     <div class="sheet-actions"><button type="button" class="btn ghost wide" data-close>Niet nu</button></div>`,
   )
+  paintAndroidPanel(d)
   const show = (os) => {
     $$('[data-os]', d).forEach((b) => {
       b.classList.toggle('is-on', b.dataset.os === os)
@@ -271,17 +299,6 @@ function openInstallSheet() {
   }
   show(isAndroid() ? 'android' : 'ios')
   $$('[data-os]', d).forEach((b) => b.addEventListener('click', () => show(b.dataset.os)))
-  $('[data-install-now]', d)?.addEventListener('click', async () => {
-    if (!installEvent) return
-    installEvent.prompt()
-    const choice = await installEvent.userChoice
-    installEvent = null
-    if (choice.outcome !== 'accepted') return
-    d.dataset.done = '1'
-    d.close()
-    toast('Het dashboard staat nu als app op je telefoon')
-    if (pushSupported() && Notification.permission === 'default') setTimeout(openPushSheet, 800)
-  })
 }
 
 function openPushSheet() {
@@ -357,11 +374,24 @@ async function syncPush() {
 }
 
 let prompted = false
+let waitedForInstall = false
 function maybePrompt() {
   if (prompted || !me || !isMobile() || $('dialog.sheet')) return
-  prompted = true
-  if (!isStandalone() && !snoozed('install')) openInstallSheet()
-  else if (pushSupported() && Notification.permission === 'default' && !snoozed('push')) openPushSheet()
+  // Never interrupt someone halfway through writing.
+  if (dirty) return void setTimeout(maybePrompt, 15000)
+  if (!isStandalone() && !snoozed('install')) {
+    // On Android wait a while for Chrome's one-tap install, so the popup can offer the button.
+    // The beforeinstallprompt listener calls this again the moment it arrives.
+    if (isAndroid() && !installEvent && !waitedForInstall) {
+      waitedForInstall = true
+      return void setTimeout(maybePrompt, 40000)
+    }
+    prompted = true
+    openInstallSheet()
+  } else if (pushSupported() && Notification.permission === 'default' && !snoozed('push')) {
+    prompted = true
+    openPushSheet()
+  }
 }
 
 async function paintPush() {
@@ -407,15 +437,15 @@ async function paintPush() {
 
 function installHtml(dismissible) {
   if (isStandalone()) return ''
-  const guide = isMobile() || isIOS()
+  const phone = isMobile() || isIOS()
   // On phones the popup does this job, so the overview card would only repeat it.
   if (dismissible && (isMobile() || localStorage.getItem('elev8_install_hidden'))) return ''
-  if (!guide && !installEvent) return ''
+  if (!phone && !installEvent) return ''
   return `<section class="card install" data-install-card><div><h2>Dashboard als app</h2><p class="muted-text">${
-    guide
+    phone
       ? 'Zet het dashboard op je beginscherm. Dan open je het met één tik, met het ELEV8-logo als icoon, en kun je meldingen krijgen.'
       : 'Zet het dashboard als app op je computer, met het ELEV8-logo als icoon.'
-  }</p></div><div class="install-actions">${guide ? '<button type="button" class="btn" data-install-guide>Bekijk hoe</button>' : '<button type="button" class="btn" data-install>Installeer als app</button>'}${dismissible ? '<button type="button" class="link" data-install-hide>Niet nu</button>' : ''}</div></section>`
+  }</p></div><div class="install-actions">${installEvent ? '<button type="button" class="btn" data-install>Installeer als app</button>' : '<button type="button" class="btn" data-install-guide>Bekijk hoe</button>'}${dismissible ? '<button type="button" class="link" data-install-hide>Niet nu</button>' : ''}</div></section>`
 }
 
 function paintInstall() {
@@ -441,10 +471,18 @@ window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault()
   installEvent = e
   paintInstall()
+  const open = $('dialog.sheet')
+  if (open) paintAndroidPanel(open)
+  else maybePrompt()
 })
 window.addEventListener('appinstalled', () => {
   installEvent = null
   paintInstall()
+  const open = $('dialog.sheet[data-kind="install"]')
+  if (open) {
+    open.dataset.done = '1'
+    open.close()
+  }
 })
 
 // ---------- shell & routing ----------
