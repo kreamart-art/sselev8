@@ -59,7 +59,8 @@ function announcementBar(a) {
   return `<div class="announce" data-announce="${id}"><div class="wrap announce-inner"><p>${inner}</p><button type="button" class="announce-close" data-aria-nl="Melding sluiten" data-aria-en="Close notice" aria-label="Melding sluiten">×</button></div></div>`
 }
 
-const LANG_INIT = `(function(){var d=document.documentElement,l;try{l=new URLSearchParams(location.search).get('lang')||localStorage.getItem('elev8_lang')}catch(e){}if(l!=='nl'&&l!=='en'){l=(navigator.language||'').toLowerCase().indexOf('nl')===0?'nl':'en'}d.setAttribute('data-lang',l);d.setAttribute('lang',l)})();`
+// Dutch unless the visitor picked English (?lang=en or the NL/EN toggle, remembered in localStorage).
+const LANG_INIT = `(function(){var d=document.documentElement,l;try{l=new URLSearchParams(location.search).get('lang')||localStorage.getItem('elev8_lang')}catch(e){}if(l!=='nl'&&l!=='en'){l='nl'}d.setAttribute('data-lang',l);d.setAttribute('lang',l)})();`
 
 export function layout(o) {
   const { meta = {}, main, nonce, settings = {}, gaId, noindex, jsonLd } = o
@@ -84,6 +85,8 @@ export function layout(o) {
 <meta name="theme-color" content="#090908">
 ${noindex ? '<meta name="robots" content="noindex, nofollow">\n' : ''}<meta property="og:title" content="${esc(meta.ogTitle || title)}">
 <meta property="og:description" content="${esc(meta.ogDescription || desc)}">
+<meta property="og:locale" content="nl_NL">
+<meta property="og:locale:alternate" content="en_GB">
 <meta property="og:type" content="${meta.ogType || 'website'}">
 <meta property="og:url" content="${esc(url)}">
 <meta property="og:site_name" content="S&amp;S ELEV8 Entertainment">
