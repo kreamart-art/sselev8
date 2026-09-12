@@ -9,6 +9,7 @@ import { saveImage, deleteImage } from './images.js'
 import { gaConfigured, gaSummary } from './ga.js'
 import { scheduleBackups } from './backup.js'
 import * as push from './push.js'
+import * as mail from './mail.js'
 import * as r from './render.js'
 
 const PORT = Number(process.env.PORT) || 5460
@@ -243,6 +244,24 @@ app.get('/robots.txt', (req, res) => {
     .send(STAGING ? 'User-agent: *\nDisallow: /\n' : `User-agent: *\nDisallow: /dashboard/\nDisallow: /api/\n\nSitemap: ${r.BASE_URL}/sitemap.xml\n`)
 })
 
+// An email to the company mailbox per contact message, with Reply-To set to the sender.
+function mailAlert({ name, email, topic, message }) {
+  const c = mail.mailConfig()
+  if (!mail.mailReady(c) || c.notify === false) return
+  const oneLine = (v) => String(v).replace(/[\r\n]+/g, ' ')
+  mail
+    .send(
+      {
+        to: c.user,
+        replyTo: { name: oneLine(name), address: email },
+        subject: `Nieuw bericht via de website: ${oneLine(name)}${topic ? ` (${oneLine(topic)})` : ''}`,
+        text: `${message}\n\nVan: ${oneLine(name)} <${email}>${topic ? `\nOnderwerp: ${oneLine(topic)}` : ''}\n\nBeantwoorden kan in het dashboard: ${r.BASE_URL}/dashboard/#/berichten\nOf antwoord op deze mail, dan gaat je antwoord rechtstreeks naar ${email}.\n`,
+      },
+      c,
+    )
+    .catch((e) => console.error('[mail] alert failed:', e.code || e.message))
+}
+
 // ---------- public forms ----------
 const publicJson = express.json({ limit: '20kb' })
 
@@ -270,6 +289,7 @@ app.post('/api/contact', publicJson, (req, res) => {
     url: '/dashboard/#/berichten',
     tag: `message-${lastInsertRowid}`,
   })
+  mailAlert({ name, email, topic, message })
   res.json({ ok: true })
 })
 
@@ -343,7 +363,10 @@ admin.use((req, res, next) => {
 })
 
 admin.get('/me', (req, res) =>
-  res.json({ user: req.user, ga: { measurement: Boolean(GA_ID), reporting: gaConfigured() }, staging: STAGING, push: { key: push.PUBLIC_KEY } }),
+  res.json({ user: req.user, ga: { measurement: Boolean(GA_ID), reporting: gaConfigured() }, staging: STAGING,
+    push: { key: push.PUBLIC_KEY },
+    mail: { configured: mail.mailReady(), user: mail.mailConfig().user },
+  }),
 )
 
 // push notifications, one subscription per device
@@ -552,7 +575,15 @@ admin.delete('/artists/:id', (req, res) => {
 })
 
 // messages
-admin.get('/messages', (req, res) => res.json(db.prepare('SELECT * FROM messages ORDER BY created_at DESC LIMIT 500').all()))
+admin.get('/messages', (req, res) => {
+  const msgs = db.prepare('SELECT * FROM messages ORDER BY created_at DESC LIMIT 500').all()
+  const byMessage = new Map()
+  for (const rep of db.prepare('SELECT id, message_id, author, body, sent_at FROM message_replies ORDER BY sent_at').all()) {
+    if (!byMessage.has(rep.message_id)) byMessage.set(rep.message_id, [])
+    byMessage.get(rep.message_id).push(rep)
+  }
+  res.json(msgs.map((m) => ({ ...m, replies: byMessage.get(m.id) || [] })))
+})
 admin.put('/messages/:id', (req, res) => {
   db.prepare('UPDATE messages SET handled_at = ? WHERE id = ?').run(req.body?.handled ? now() : null, Number(req.params.id))
   res.json({ ok: true })
@@ -560,6 +591,94 @@ admin.put('/messages/:id', (req, res) => {
 admin.delete('/messages/:id', (req, res) => {
   db.prepare('DELETE FROM messages WHERE id = ?').run(Number(req.params.id))
   res.json({ ok: true })
+})
+admin.post('/messages/:id/reply', async (req, res) => {
+  const m = db.prepare('SELECT * FROM messages WHERE id = ?').get(Number(req.params.id))
+  if (!m) throw fail(404, 'Bericht niet gevonden.')
+  const body = String(req.body?.body ?? '').replace(/\r\n/g, '\n').trim().slice(0, 10_000)
+  if (!body) throw fail(400, 'Schrijf eerst je antwoord.')
+  if (!auth.rateLimit(`reply:${req.user.id}`, 30, 60 * 60_000)) throw fail(429, 'Je hebt veel mails achter elkaar verstuurd. Wacht even.')
+  const c = mail.mailConfig()
+  if (!mail.mailReady(c)) throw fail(400, mail.mailError({ code: 'ENOCONFIG' }))
+  const en = m.lang === 'en'
+  const oneLine = (v) => String(v).replace(/[\r\n]+/g, ' ')
+  const when = new Date(m.created_at).toLocaleString(en ? 'en-GB' : 'nl-NL', { timeZone: 'Europe/Amsterdam', dateStyle: 'long', timeStyle: 'short' })
+  const quote = m.body.split('\n').map((line) => `> ${line}`).join('\n')
+  const text = [
+    body,
+    '',
+    en ? 'Kind regards,' : 'Met vriendelijke groet,',
+    (req.user.name || '').split(' ')[0],
+    'S&S ELEV8 Entertainment',
+    r.BASE_URL.replace(/^https?:\/\//, ''),
+    '',
+    en ? `On ${when}, ${oneLine(m.name)} wrote:` : `Op ${when} schreef ${oneLine(m.name)}:`,
+    quote,
+    '',
+  ].join('\n')
+  const subject = `Re: ${oneLine(m.topic) || (en ? 'your message to S&S ELEV8' : 'je bericht aan S&S ELEV8')}`
+  try {
+    // Bcc to the company mailbox so the conversation is complete there as well.
+    await mail.send({ to: { name: oneLine(m.name), address: m.email }, subject, text, bcc: c.user }, c)
+  } catch (e) {
+    console.error('[mail] reply failed:', e.code || e.message)
+    throw fail(400, mail.mailError(e))
+  }
+  const t = now()
+  const { lastInsertRowid } = db
+    .prepare('INSERT INTO message_replies (message_id, user_id, author, body, sent_at) VALUES (?, ?, ?, ?, ?)')
+    .run(m.id, req.user.id, req.user.name || req.user.email, body, t)
+  db.prepare('UPDATE messages SET handled_at = COALESCE(handled_at, ?) WHERE id = ?').run(t, m.id)
+  res.json({ id: Number(lastInsertRowid), sent_at: t, to: m.email })
+})
+
+// mailbox for replies and alerts
+const MAIL_HOST = /^[a-z0-9.-]{3,253}$/i
+admin.get('/mail', (req, res) => res.json(mail.mailStatus()))
+admin.put('/mail', async (req, res) => {
+  if (mail.fromEnv()) throw fail(400, 'De mailbox is op de server ingesteld en kan hier niet worden gewijzigd.')
+  const b = req.body || {}
+  const old = mail.mailConfig()
+  const next = {
+    host: str(b.host, 253) || old.host,
+    port: Number(b.port) || Number(old.port),
+    user: str(b.user, 200).toLowerCase() || old.user,
+    pass: typeof b.pass === 'string' && b.pass ? b.pass.slice(0, 500) : old.pass,
+    notify: b.notify !== false,
+    verifiedAt: old.verifiedAt,
+  }
+  if (!MAIL_HOST.test(next.host) || !Number.isInteger(next.port) || next.port < 1 || next.port > 65535) throw fail(400, 'De serverinstellingen kloppen niet.')
+  if (!EMAIL_RE.test(next.user)) throw fail(400, 'Vul een geldig mailadres in.')
+  if (!next.pass) throw fail(400, 'Vul het wachtwoord van de mailbox in.')
+  const loginChanged = next.host !== old.host || next.port !== Number(old.port) || next.user !== old.user || next.pass !== old.pass
+  if (loginChanged || !old.verifiedAt) {
+    try {
+      await mail.verify(next)
+    } catch (e) {
+      console.error('[mail] verify failed:', e.code || e.message)
+      throw fail(400, mail.mailError(e))
+    }
+    next.verifiedAt = now()
+  }
+  mail.saveMailConfig(next)
+  res.json(mail.mailStatus())
+})
+admin.post('/mail/test', async (req, res) => {
+  const c = mail.mailConfig()
+  try {
+    await mail.send(
+      {
+        to: c.user,
+        subject: 'Testmail van het ELEV8-dashboard',
+        text: `Dit is een testmail, verstuurd door ${req.user.name || req.user.email} vanuit het dashboard.\n\nKomt hij aan, dan werkt antwoorden vanuit het dashboard.\n`,
+      },
+      c,
+    )
+  } catch (e) {
+    console.error('[mail] test failed:', e.code || e.message)
+    throw fail(400, mail.mailError(e))
+  }
+  res.json({ ok: true, to: c.user })
 })
 
 // subscribers

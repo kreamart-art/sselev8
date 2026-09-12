@@ -65,18 +65,87 @@
   window.addEventListener('resize', measure);
   window.addEventListener('scroll', onScroll, { passive: true });
 
-  /* mobile menu */
+  /* mobile menu: close with the X, a tap on the empty area, Escape or a swipe */
   var toggle = $('.nav-toggle');
-  if (toggle) {
+  var menu = $('#nav-menu');
+  if (toggle && menu) {
+    var isOpen = function () { return document.body.classList.contains('nav-open'); };
+    var resetTimer;
     var setOpen = function (open) {
+      clearTimeout(resetTimer);
+      if (open) { menu.style.transform = ''; menu.style.opacity = ''; }
       document.body.classList.toggle('nav-open', open);
       toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      toggle.setAttribute('data-aria-nl', open ? 'Menu sluiten' : 'Menu openen');
+      toggle.setAttribute('data-aria-en', open ? 'Close menu' : 'Open menu');
+      toggle.setAttribute('aria-label', toggle.getAttribute('data-aria-' + lang()));
+      // A menu that fits on screen can be swiped any way; one that scrolls keeps vertical scrolling.
+      menu.style.touchAction = open && menu.scrollHeight <= menu.clientHeight + 1 ? 'none' : 'pan-y';
+      // A swipe leaves the panel slid out; reset it once it is hidden.
+      if (!open) resetTimer = setTimeout(function () { menu.style.transform = ''; menu.style.opacity = ''; }, 400);
       onScroll();
     };
-    toggle.addEventListener('click', function () { setOpen(!document.body.classList.contains('nav-open')); });
+    toggle.addEventListener('click', function () { setOpen(!isOpen()); });
     $$('.nav-menu a').forEach(function (a) { a.addEventListener('click', function () { setOpen(false); }); });
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && document.body.classList.contains('nav-open')) { setOpen(false); toggle.focus(); }
+      if (e.key === 'Escape' && isOpen()) { setOpen(false); toggle.focus(); }
+    });
+
+    var drag = null;
+    var swallowClick = false;
+    menu.addEventListener('pointerdown', function (e) {
+      if (!isOpen() || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, t: Date.now(), axis: '', dx: 0, dy: 0 };
+    });
+    menu.addEventListener('pointermove', function (e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      drag.dx = e.clientX - drag.x;
+      drag.dy = e.clientY - drag.y;
+      if (!drag.axis) {
+        if (Math.abs(drag.dx) < 8 && Math.abs(drag.dy) < 8) return;
+        drag.axis = Math.abs(drag.dx) >= Math.abs(drag.dy) ? 'x' : drag.dy < 0 && menu.style.touchAction === 'none' ? 'y' : 'none';
+        if (drag.axis === 'none') return;
+        swallowClick = true;
+        menu.classList.add('is-dragging');
+        try { menu.setPointerCapture(e.pointerId); } catch (err) { /* older browsers */ }
+      }
+      if (drag.axis === 'x') {
+        menu.style.transform = 'translateX(' + drag.dx + 'px)';
+        menu.style.opacity = String(1 - Math.min(Math.abs(drag.dx) / menu.clientWidth, 1) * 0.7);
+      } else if (drag.axis === 'y') {
+        var up = Math.min(drag.dy, 0);
+        menu.style.transform = 'translateY(' + up + 'px)';
+        menu.style.opacity = String(1 - Math.min(-up / menu.clientHeight, 1) * 0.7);
+      }
+    });
+    var endDrag = function (e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      var d = drag;
+      drag = null;
+      menu.classList.remove('is-dragging');
+      if (!d.axis || d.axis === 'none') return;
+      var dist = d.axis === 'x' ? Math.abs(d.dx) : -Math.min(d.dy, 0);
+      var fast = dist / Math.max(Date.now() - d.t, 1) > 0.5;
+      if (e.type === 'pointerup' && (dist > 80 || (dist > 30 && fast))) {
+        menu.style.transform = d.axis === 'x' ? 'translateX(' + (d.dx > 0 ? '100%' : '-100%') + ')' : 'translateY(-30%)';
+        menu.style.opacity = '0';
+        setOpen(false);
+      } else {
+        menu.style.transform = '';
+        menu.style.opacity = '';
+      }
+      setTimeout(function () { swallowClick = false; }, 0);
+    };
+    menu.addEventListener('pointerup', endDrag);
+    menu.addEventListener('pointercancel', endDrag);
+    // Otherwise a swipe that starts on a link turns into dragging that link (mouse, long press).
+    menu.addEventListener('dragstart', function (e) { e.preventDefault(); });
+    // After a swipe the browser still fires a click; it must not follow a link.
+    menu.addEventListener('click', function (e) {
+      if (swallowClick) { e.preventDefault(); e.stopPropagation(); }
+    }, true);
+    menu.addEventListener('click', function (e) {
+      if (isOpen() && !e.target.closest('a')) setOpen(false);
     });
   }
 

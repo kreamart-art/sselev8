@@ -1138,37 +1138,98 @@ async function viewArtistEditor(el, id) {
 // ---------- messages ----------
 async function viewMessages(el) {
   const msgs = await api('/messages')
-  const open = msgs.filter((m) => !m.handled_at).length
+  const waiting = msgs.filter((m) => !m.handled_at).length
+  const canMail = Boolean(me.mail?.configured)
+  const card = (m) => {
+    const subject = encodeURIComponent(`Re: ${m.topic || 'je bericht aan S&S ELEV8'}`)
+    const mailto = `mailto:${esc(m.email)}?subject=${subject}`
+    const hello = `${m.lang === 'en' ? 'Hi' : 'Hoi'} ${m.name.split(' ')[0]},\n\n`
+    const replies = m.replies.length
+      ? `<div class="replies">${m.replies
+          .map(
+            (rep) =>
+              `<div class="reply"><div class="reply-meta"><strong>${esc(rep.author)}</strong><span>antwoordde op ${fmtDateTime(rep.sent_at)}</span></div><p class="msg-body">${esc(rep.body)}</p></div>`,
+          )
+          .join('')}</div>`
+      : ''
+    return `<article class="card msg${m.handled_at ? ' is-done' : ''}" data-id="${m.id}">
+      <div class="msg-head"><div class="who"><strong>${esc(m.name)}</strong><a href="mailto:${esc(m.email)}">${esc(m.email)}</a></div>
+      <div class="row-sub">${m.handled_at ? '<span class="badge muted">Afgehandeld</span>' : '<span class="badge warn">Nieuw</span>'}${m.topic ? `<span class="badge">${esc(m.topic)}</span>` : ''}<span>${fmtDateTime(m.created_at)}</span></div></div>
+      <p class="msg-body">${esc(m.body)}</p>
+      ${replies}
+      <div class="msg-actions">${
+        canMail ? `<button type="button" class="btn" data-reply>${m.replies.length ? 'Nog een antwoord' : 'Beantwoorden'}</button>` : `<a class="btn" href="${mailto}">Beantwoorden</a>`
+      }
+      <button type="button" class="link" data-toggle>${m.handled_at ? 'Terugzetten naar nieuw' : 'Markeer als afgehandeld'}</button>
+      <button type="button" class="link danger" data-remove>Verwijderen</button></div>
+      ${
+        canMail
+          ? `<form class="reply-form" data-reply-form hidden novalidate>
+        <label for="reply-${m.id}">Je antwoord aan ${esc(m.name)}</label>
+        <textarea id="reply-${m.id}" name="body" rows="8">${esc(hello)}</textarea>
+        <p class="hint">Gaat naar ${esc(m.email)}, vanaf ${esc(me.mail.user)}. Je naam en S&amp;S ELEV8 komen er automatisch onder, met hun bericht als citaat. Een kopie komt in jullie mailbox.</p>
+        <div class="msg-actions"><button type="submit" class="btn">Versturen</button><button type="button" class="link" data-reply-cancel>Annuleren</button><a class="link" href="${mailto}">Liever via je mail-app</a></div>
+      </form>`
+          : ''
+      }
+    </article>`
+  }
   el.innerHTML =
-    pageHead('Berichten', open ? `${open} ${open === 1 ? 'bericht wacht' : 'berichten wachten'} op een reactie.` : 'Alles wat via het contactformulier binnenkomt.') +
-    (msgs.length
-      ? msgs
-          .map((m) => {
-            const subject = encodeURIComponent(`Re: ${m.topic || 'je bericht aan S&S ELEV8'}`)
-            return `<article class="card msg${m.handled_at ? ' is-done' : ''}" data-id="${m.id}">
-              <div class="msg-head"><div class="who"><strong>${esc(m.name)}</strong><a href="mailto:${esc(m.email)}">${esc(m.email)}</a></div>
-              <div class="row-sub">${m.handled_at ? '<span class="badge muted">Afgehandeld</span>' : '<span class="badge warn">Nieuw</span>'}${m.topic ? `<span class="badge">${esc(m.topic)}</span>` : ''}<span>${fmtDateTime(m.created_at)}</span></div></div>
-              <p class="msg-body">${esc(m.body)}</p>
-              <div class="msg-actions"><a class="btn" href="mailto:${esc(m.email)}?subject=${subject}">Beantwoorden</a>
-              <button type="button" class="link" data-toggle>${m.handled_at ? 'Terugzetten naar nieuw' : 'Markeer als afgehandeld'}</button>
-              <button type="button" class="link danger" data-remove>Verwijderen</button></div>
-            </article>`
-          })
-          .join('')
-      : emptyState('Nog geen berichten', 'Berichten via het contactformulier verschijnen hier.'))
-  $$('.msg', el).forEach((card) => {
-    const id = card.dataset.id
+    pageHead('Berichten', waiting ? `${waiting} ${waiting === 1 ? 'bericht wacht' : 'berichten wachten'} op een reactie.` : 'Alles wat via het contactformulier binnenkomt.') +
+    (msgs.length && !canMail
+      ? '<div class="card notice"><p>Wil je direct vanuit het dashboard antwoorden? Verbind eerst jullie mailbox bij <a href="#/instellingen">Instellingen</a>. Tot die tijd opent Beantwoorden je eigen mail-app.</p></div>'
+      : '') +
+    (msgs.length ? msgs.map(card).join('') : emptyState('Nog geen berichten', 'Berichten via het contactformulier verschijnen hier.'))
+  $$('.msg', el).forEach((c) => {
+    const id = c.dataset.id
     const m = msgs.find((x) => String(x.id) === id)
-    $('[data-toggle]', card).addEventListener('click', async () => {
+    $('[data-toggle]', c).addEventListener('click', async () => {
       await api(`/messages/${id}`, { method: 'PUT', body: { handled: !m.handled_at } }).catch((e) => toast(e.message, true))
       refreshCounts()
       viewMessages(el)
     })
-    $('[data-remove]', card).addEventListener('click', async () => {
+    $('[data-remove]', c).addEventListener('click', async () => {
       if (!confirm(`Het bericht van ${m.name} verwijderen?`)) return
       await api(`/messages/${id}`, { method: 'DELETE' }).catch((e) => toast(e.message, true))
       refreshCounts()
       viewMessages(el)
+    })
+    const form = $('[data-reply-form]', c)
+    if (!form) return
+    const start = $('[data-reply]', c)
+    const ta = form.elements.namedItem('body')
+    start.addEventListener('click', () => {
+      form.hidden = false
+      start.hidden = true
+      ta.focus()
+      ta.setSelectionRange(ta.value.length, ta.value.length)
+    })
+    ta.addEventListener('input', () => (dirty = true))
+    $('[data-reply-cancel]', form).addEventListener('click', () => {
+      if (ta.value.trim() !== ta.defaultValue.trim() && !confirm('Je antwoord weggooien?')) return
+      dirty = false
+      ta.value = ta.defaultValue
+      form.hidden = true
+      start.hidden = false
+    })
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault()
+      const text = ta.value.trim()
+      if (!text || text === ta.defaultValue.trim()) return toast('Schrijf eerst je antwoord.', true)
+      const btn = $('button[type=submit]', form)
+      btn.disabled = true
+      btn.textContent = 'Versturen…'
+      try {
+        const sent = await api(`/messages/${id}/reply`, { method: 'POST', body: { body: text } })
+        dirty = false
+        toast(`Verstuurd naar ${sent.to}`)
+        refreshCounts()
+        viewMessages(el)
+      } catch (err) {
+        toast(err.message, true)
+        btn.disabled = false
+        btn.textContent = 'Versturen'
+      }
     })
   })
 }
@@ -1202,13 +1263,36 @@ async function viewSubscribers(el) {
 }
 
 // ---------- settings ----------
+const mailCard = (ms) => {
+  const off = ms.fromEnv ? ' disabled' : ''
+  return `<form class="card" data-mail novalidate>
+    <div class="card-head"><h2>E-mail</h2>${ms.configured ? '<span class="badge ok">Verbonden</span>' : '<span class="badge warn">Nog niet ingesteld</span>'}</div>
+    <p class="muted-text" style="margin:-4px 0 16px">Hiermee beantwoord je berichten direct vanuit het dashboard, vanaf jullie eigen mailbox. Vul het wachtwoord van de mailbox bij STRATO in. Het blijft op de server en is hier niet terug te lezen.</p>
+    ${ms.fromEnv ? '<p class="hint" style="margin-bottom:14px">Deze mailbox is op de server ingesteld.</p>' : ''}
+    <div class="row-2">
+      <div class="field"><label for="m-user">Mailadres</label><input id="m-user" name="user" type="email" autocomplete="off" value="${esc(ms.user)}"${off}></div>
+      <div class="field"><label for="m-pass">Wachtwoord van de mailbox</label><input id="m-pass" name="pass" type="password" autocomplete="new-password" placeholder="${ms.hasPassword ? 'Opgeslagen, laat leeg om te houden' : ''}"${off}></div>
+    </div>
+    <details class="mail-adv"><summary>Serverinstellingen</summary>
+      <div class="row-2" style="margin-top:14px">
+        <div class="field"><label for="m-host">Uitgaande server</label><input id="m-host" name="host" autocomplete="off" value="${esc(ms.host)}"${off}></div>
+        <div class="field"><label for="m-port">Poort</label><input id="m-port" name="port" type="number" inputmode="numeric" value="${Number(ms.port) || 465}"${off}></div>
+      </div>
+      <p class="hint" style="margin-top:8px">Voor STRATO is dat smtp.strato.de met poort 465.</p>
+    </details>
+    <label class="check" style="margin-top:16px"><input type="checkbox" name="notify"${ms.notify ? ' checked' : ''}> Stuur ook een e-mail naar dit adres bij elk nieuw bericht via de site</label>
+    <p class="form-error" data-mail-error role="alert" style="margin-top:12px"></p>
+    <div class="stack-btns" style="max-width:260px;margin-top:6px">${ms.fromEnv ? '' : '<button type="submit" class="btn">Opslaan en testen</button>'}${ms.configured ? '<button type="button" class="btn ghost" data-mail-test>Stuur een testmail</button>' : ''}</div>
+  </form>`
+}
+
 async function viewSettings(el) {
-  const s = await api('/settings')
+  const [s, ms] = await Promise.all([api('/settings'), api('/mail')])
   const a = s.announcement
   const soc = s.socials
   const socField = (k, label) =>
     `<div class="field"><label for="s-${k}">${label}</label><input id="s-${k}" name="${k}" inputmode="url" placeholder="https://" value="${esc(soc[k] || '')}"></div>`
-  el.innerHTML = `${pageHead('Instellingen', 'Wat er op alle pagina\'s van de site staat.')}
+  el.innerHTML = `${pageHead('Instellingen', 'Wat er op alle pagina\'s van de site staat, en jullie mailbox.')}
   <form class="card" data-ann novalidate>
     <h2>Aankondigingsbalk</h2>
     <p class="muted-text" style="margin:6px 0 16px">Een korte melding bovenaan elke pagina, bijvoorbeeld voor een event of een nieuwe release. Bezoekers kunnen hem wegklikken.</p>
@@ -1228,7 +1312,8 @@ async function viewSettings(el) {
     <div class="row-2">${socField('youtube', 'YouTube')}${socField('tiktok', 'TikTok')}</div>
     ${socField('linkedin', 'LinkedIn')}
     <div class="stack-btns" style="max-width:240px"><button type="submit" class="btn">Opslaan</button></div>
-  </form>`
+  </form>
+  ${mailCard(ms)}`
   const ann = $('[data-ann]', el)
   const preview = () => {
     const text = ann.text_nl.value.trim()
@@ -1266,6 +1351,51 @@ async function viewSettings(el) {
       toast('Opgeslagen')
     } catch (err) {
       toast(err.message, true)
+    }
+  })
+
+  const mf = $('[data-mail]', el)
+  passwordToggles(mf)
+  mf.addEventListener('input', () => (dirty = true))
+  mf.addEventListener('submit', async (e) => {
+    e.preventDefault()
+    const f = mf.elements
+    const btn = $('button[type=submit]', mf)
+    const errBox = $('[data-mail-error]', mf)
+    errBox.textContent = ''
+    btn.disabled = true
+    btn.textContent = 'Verbinden…'
+    try {
+      const saved = await api('/mail', {
+        method: 'PUT',
+        body: {
+          user: f.namedItem('user').value.trim(),
+          pass: f.namedItem('pass').value,
+          host: f.namedItem('host').value.trim(),
+          port: Number(f.namedItem('port').value),
+          notify: f.namedItem('notify').checked,
+        },
+      })
+      dirty = false
+      me.mail = { configured: saved.configured, user: saved.user }
+      toast('De mailbox is verbonden. Je kunt nu antwoorden vanuit Berichten.')
+      viewSettings(el)
+    } catch (err) {
+      errBox.textContent = err.message
+      btn.disabled = false
+      btn.textContent = 'Opslaan en testen'
+    }
+  })
+  $('[data-mail-test]', mf)?.addEventListener('click', async (e) => {
+    const b = e.currentTarget
+    b.disabled = true
+    try {
+      const sent = await api('/mail/test', { method: 'POST' })
+      toast(`Testmail verstuurd naar ${sent.to}`)
+    } catch (err) {
+      toast(err.message, true)
+    } finally {
+      b.disabled = false
     }
   })
 }

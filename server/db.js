@@ -110,6 +110,16 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   created_at INTEGER NOT NULL,
   last_ok_at INTEGER
 );
+-- Answers sent from the dashboard, kept under the contact message they belong to.
+CREATE TABLE IF NOT EXISTS message_replies (
+  id INTEGER PRIMARY KEY,
+  message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  author TEXT NOT NULL DEFAULT '',
+  body TEXT NOT NULL,
+  sent_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS message_replies_msg ON message_replies(message_id);
 CREATE INDEX IF NOT EXISTS posts_status_pub ON posts(status, published_at);
 CREATE INDEX IF NOT EXISTS messages_created ON messages(created_at);
 `)

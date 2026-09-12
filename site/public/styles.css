@@ -215,6 +215,16 @@ body.nav-open .nav-toggle span:last-child { top: 20.5px; transform: rotate(-45de
   body.nav-open .nav-menu { opacity: 1; visibility: visible; transform: none; }
   body.nav-open { overflow: hidden; }
   .nav-menu a { font: 800 2.1rem/1 var(--f-display); letter-spacing: 0.02em; color: var(--ink); padding: 0.3rem 0; display: inline-block; }
+  .nav-menu { overflow-y: auto; overscroll-behavior: contain; }
+  .nav-menu.is-dragging { transition: none; }
+  /* Open, the toggle is a clear round close button rather than two thin lines. */
+  .nav-toggle { width: 44px; height: 44px; border-radius: 50%; transition: background 0.3s var(--ease); }
+  .nav-toggle span { left: 11px; right: 11px; }
+  .nav-toggle span:first-child { top: 17px; }
+  .nav-toggle span:last-child { top: 26px; }
+  body.nav-open .nav-toggle { background: rgba(244, 239, 230, 0.12); }
+  body.nav-open .nav-toggle span { height: 2px; }
+  body.nav-open .nav-toggle span:first-child, body.nav-open .nav-toggle span:last-child { top: 21px; }
 }
 
 /* ---------- announcement ---------- */

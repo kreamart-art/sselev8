@@ -184,6 +184,19 @@ details.table-view td:last-child, details.table-view th:last-child { text-align:
 .msg-body { white-space: pre-wrap; color: var(--ink-2); overflow-wrap: anywhere; }
 .msg-actions { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin-top: 16px; }
 .msg.is-done { opacity: 0.62; }
+.replies { display: grid; gap: 10px; margin-top: 16px; }
+.reply { background: var(--panel-2); border-radius: 10px; padding: 12px 14px; }
+.reply-meta { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-bottom: 6px; font-size: 0.84rem; color: var(--muted); }
+.reply-meta strong { color: var(--gold); font-weight: 600; }
+.reply-form { display: grid; gap: 8px; margin-top: 16px; }
+.reply-form label { font-size: 0.86rem; font-weight: 600; color: var(--ink-2); }
+.reply-form textarea { width: 100%; background: var(--panel-2); border: 1px solid transparent; border-radius: 9px; padding: 11px 13px; color: var(--ink); line-height: 1.6; resize: vertical; transition: border-color 0.2s, background 0.2s; }
+.reply-form textarea:focus { outline: none; border-color: var(--gold); background: var(--panel-3); }
+.reply-form .msg-actions { margin-top: 4px; }
+.notice p { color: var(--ink-2); }
+.notice a { color: var(--gold); text-decoration: underline; }
+.mail-adv { margin-top: 16px; }
+.mail-adv summary { cursor: pointer; color: var(--ink-2); font-size: 0.88rem; }
 
 /* editor */
 .editor { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; align-items: start; }
