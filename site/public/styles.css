@@ -418,6 +418,11 @@ body.nav-open .nav-toggle span:last-child { top: 20.5px; transform: rotate(-45de
 .footer-links { display: flex; gap: 1.6rem; }
 .footer-links a, .footer-links button { color: var(--faint); font-size: 0.82rem; transition: color 0.3s var(--ease); }
 .footer-links a:hover, .footer-links button:hover { color: var(--ink); }
+.footer-links { align-items: center; }
+/* KRM KRUEGER maker's mark: white, small, with a comfortable tap area. */
+.footer-links .footer-credit { display: inline-flex; padding: 0.35rem; margin: -0.35rem; color: #fff; }
+.footer-links .footer-credit:hover { color: var(--gold); }
+.footer-credit svg { display: block; height: 22px; width: auto; }
 @media (max-width: 860px) {
   .footer-grid { grid-template-columns: 1fr 1fr; }
   .footer-news { grid-column: 1 / -1; }

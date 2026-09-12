@@ -30,6 +30,9 @@ export function loadPage(name) {
 // Bilingual text. English falls back to Dutch when a founder leaves it empty.
 export const bi = (nl, en) => `<span data-show="nl">${esc(nl)}</span><span data-show="en">${esc(en || nl)}</span>`
 const biHtml = (nl, en) => `<span data-show="nl">${nl}</span><span data-show="en">${en || nl}</span>`
+
+// KRM KRUEGER maker's mark (traced from the artwork, 784x625). currentColor, so CSS sets it white.
+const KRM_MARK = `<svg viewBox="0 0 784 625" aria-hidden="true" focusable="false"><path fill="currentColor" fill-rule="evenodd" d="M686 624C656.6 623.5 641.5 622.9 639.5 622.1C636.2 620.8 631.5 616.7 629.7 613.5C628.8 612 628.4 587.6 628 522.5L627.5 433.5L625.1 430.2C623.7 428.5 622.4 427 622.1 427.1C621.8 427.1 620.1 428.8 618.5 430.8C615.3 434.8 607.2 442.6 578 469.5C567.8 478.9 544.5 500.6 526 517.9C507.6 535.2 489.5 552 485.9 555.4C482.3 558.8 468 572.3 454.1 585.5C418.6 619.1 416.3 620.9 404.8 623C397.6 624.4 175.5 624.3 172.9 623C171.9 622.4 171 621.2 171 620.2C171 618.4 347.3 441.8 354.7 436.1C359.8 432.3 367.7 428.7 376.2 426.4C382 424.9 392.1 424.8 499.6 425.3C564 425.7 617.4 426.2 618.3 426.6C622.4 428.1 619.3 425 611.5 419.8C594.5 408.4 578.4 402.2 560 400.1C550 398.9 460.1 397 412.4 397C383.1 397 377 396.4 369.8 393C363.8 390.2 358.9 386 329.9 358.5C316 345.3 301.7 331.8 298.1 328.4C294.5 325 276.4 308.2 258 290.9C239.5 273.6 216.2 251.9 206 242.5C176.8 215.6 168.7 207.8 165.5 203.8C163.9 201.8 162.2 200.1 161.9 200.1C161.6 200 160.3 201.5 158.9 203.3L156.5 206.5L156 295.5C155.6 360.6 155.2 385 154.3 386.5C152.5 389.7 147.8 393.8 144.5 395C141.1 396.3 29.6 398.5 22 397.5C12 396.1 3.2 389.2 1 381.1C0.3 378.4 0.1 323.5 0.2 200.8L0.5 24.5L2.9 19.3C4.2 16.4 7.1 12.3 9.4 10.2C16.9 3.3 16.9 3.3 81 2C143.4 0.7 144.9 0.8 150.4 5.8C156.2 11.2 156 7.8 156 96.9C156 142.1 156.4 179 156.8 179C157.2 179 171.7 164.3 189.1 146.2C330.9 -1 321.7 8.2 329.9 4.2L337.4 0.5L442.7 0.5L547.9 0.5L550.1 2.7C551.6 4.2 552.1 5.5 551.6 7.3C551.3 8.8 536 23.6 510.3 47.1C488 67.7 463.1 90.6 455.1 98C422.8 127.9 397.3 150.9 389.1 157.3C381 163.7 368.8 168.4 357.5 169.5C354.2 169.8 324.7 170.5 292 171C259.3 171.6 228.5 172.5 223.5 173.1C205.4 175.3 189.3 181.5 172.5 192.8C164.7 198 161.6 201.1 165.7 199.6C166.6 199.2 220 198.7 284.4 198.3C391.9 197.8 402 197.9 407.8 199.4C416.3 201.7 424.3 205.3 429.3 209.1C434.4 213 592.4 370.4 612.3 391.2C620 399.4 626.6 406 627.1 406C627.6 406 628 369.1 628 323.9C628 234.8 627.8 238.2 633.6 232.8C639.1 227.8 640.6 227.7 703 229C767.1 230.3 767.1 230.3 774.6 237.2C776.9 239.3 779.8 243.4 781.1 246.3L783.5 251.5L783.8 427.8C783.9 550.5 783.7 605.4 783 608.1C781.6 613.3 775.7 619.8 770 622.4C764.5 624.9 752.2 625.1 686 624Z"/></svg>`
 const arrow = '<span class="arr" aria-hidden="true">→</span>'
 
 const NAV = [
@@ -147,7 +150,7 @@ ${socialLinks(settings.socials)}
 </div>
 <div class="wrap footer-bottom">
 <span>© ${year} S&amp;S ELEV8 Entertainment</span>
-<span class="footer-links"><a href="/privacy">${bi('Privacy', 'Privacy')}</a>${gaId ? `<button type="button" data-consent-open>${bi('Cookie-instellingen', 'Cookie settings')}</button>` : ''}</span>
+<span class="footer-links"><a href="/privacy">${bi('Privacy', 'Privacy')}</a>${gaId ? `<button type="button" data-consent-open>${bi('Cookie-instellingen', 'Cookie settings')}</button>` : ''}<a class="footer-credit" href="https://www.krmkrueger.com" target="_blank" rel="noopener" title="KRM KRUEGER" aria-label="Website door KRM KRUEGER" data-aria-nl="Website door KRM KRUEGER" data-aria-en="Website by KRM KRUEGER">${KRM_MARK}</a></span>
 </div>
 </footer>
 ${gaId ? `<div class="consent" role="dialog" aria-modal="false" aria-labelledby="consent-title" data-consent hidden>
