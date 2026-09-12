@@ -59,6 +59,36 @@ function toast(msg, err = false) {
   setTimeout(() => el.remove(), 4000)
 }
 
+// Eye button on every password field, so you can check what you typed.
+const EYE = '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/>'
+const EYE_OFF =
+  '<path d="M3.5 3.5l17 17"/><path d="M10.5 5.6c.5-.1 1-.1 1.5-.1 6 0 9.5 6.5 9.5 6.5a16.6 16.6 0 0 1-2.9 3.7"/><path d="M6.7 6.7C4 8.5 2.5 12 2.5 12s3.5 6.5 9.5 6.5c1.9 0 3.6-.6 5-1.5"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>'
+function passwordToggles(root) {
+  $$('input[type=password]', root).forEach((input) => {
+    if (input.closest('.pw')) return
+    const wrap = document.createElement('div')
+    wrap.className = 'pw'
+    input.replaceWith(wrap)
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.className = 'pw-toggle'
+    wrap.append(input, btn)
+    const show = (on) => {
+      input.type = on ? 'text' : 'password'
+      btn.setAttribute('aria-pressed', String(on))
+      btn.setAttribute('aria-label', on ? 'Wachtwoord verbergen' : 'Wachtwoord tonen')
+      btn.innerHTML = svg(on ? EYE_OFF : EYE)
+    }
+    show(false)
+    // Keeps the cursor in the field while toggling.
+    btn.addEventListener('mousedown', (e) => e.preventDefault())
+    btn.addEventListener('click', () => show(input.type === 'password'))
+    // Hidden again on submit, so password managers still recognise the field.
+    input.form?.addEventListener('submit', () => show(false))
+    input.form?.addEventListener('reset', () => show(false))
+  })
+}
+
 async function uploadImage(file) {
   if (!file) return null
   if (file.size > 12 * 1024 * 1024) throw new Error('Die foto is te groot (maximaal 12 MB).')
@@ -96,6 +126,7 @@ function renderLogin(notice = '') {
     <p class="form-error" role="alert">${esc(notice)}</p>
     <p class="hint">Wachtwoord vergeten? Vraag je mede-founder om via Account een nieuwe link voor je te maken.</p>
   </form></div>`
+  passwordToggles(app)
   const form = $('[data-login]')
   form.email.focus()
   form.addEventListener('submit', async (e) => {
@@ -131,6 +162,7 @@ async function renderTokenPage(token) {
     <button class="btn wide" type="submit">${setup ? 'Account activeren' : 'Wachtwoord opslaan'}</button>
     <p class="form-error" role="alert"></p>
   </form></div>`
+  passwordToggles(app)
   const form = $('[data-token]')
   form.password.focus()
   form.addEventListener('submit', async (e) => {
@@ -1240,6 +1272,7 @@ async function viewAccount(el) {
 
   paintInstall()
   paintPush()
+  passwordToggles(el)
   const pass = $('[data-pass]', el)
   pass.addEventListener('submit', async (e) => {
     e.preventDefault()

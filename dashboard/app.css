@@ -109,6 +109,12 @@ a.kpi:hover { background: var(--panel-2); }
 .field input, .field textarea, .field select { width: 100%; background: var(--panel-2); border: 1px solid transparent; border-radius: 9px; padding: 11px 13px; color: var(--ink); transition: border-color 0.2s, background 0.2s; }
 .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--gold); background: var(--panel-3); }
 .field textarea { resize: vertical; line-height: 1.6; }
+.pw { position: relative; }
+.field .pw input { padding-right: 50px; }
+.pw-toggle { position: absolute; top: 50%; right: 5px; transform: translateY(-50%); width: 40px; height: 40px; border-radius: 7px; display: grid; place-items: center; color: var(--muted); transition: color 0.2s; }
+.pw-toggle:hover, .pw-toggle[aria-pressed="true"] { color: var(--gold); }
+/* Edge adds its own reveal eye; one is enough. */
+.pw input::-ms-reveal { display: none; }
 .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 @media (max-width: 640px) { .row-2 { grid-template-columns: 1fr; } }
 .check { display: flex; align-items: center; gap: 10px; font-weight: 500; cursor: pointer; }
